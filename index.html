@@ -4,21 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JB Hub</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    input, button { padding: 8px; margin: 5px 0; display: block; }
+  </style>
 </head>
 <body>
 
-  <!-- Visible Page Content -->
-  <h1>Welcome to JB Hub</h1>
-  <p>Status: Firebase connected successfully!</p>
+  <h1>JB Hub Database Test</h1>
+  
+  <input type="text" id="username" placeholder="Enter Username">
+  <input type="number" id="score" placeholder="Enter Score">
+  <button id="saveBtn">Save to Database</button>
 
-  <!-- Firebase Script -->
+  <p id="status"></p>
+
   <script type="module">
-    // Import the required Firebase modules
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // Your Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyDz9tvaSzzsp0mMUY0-oIaBR0hSPObPDdQ",
       authDomain: "jb-hub-93d7a.firebaseapp.com",
@@ -29,12 +33,31 @@
       measurementId: "G-7WHNLQ2P9Q"
     };
 
-    // Initialize Firebase and database services
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
     const db = getFirestore(app);
 
-    console.log("Firebase initialized successfully!");
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      const name = document.getElementById("username").value;
+      const userScore = document.getElementById("score").value;
+      const statusText = document.getElementById("status");
+
+      if(!name || !userScore) {
+        statusText.innerText = "Please fill in both fields!";
+        return;
+      }
+
+      try {
+        await setDoc(doc(db, "scores", name), {
+          username: name,
+          score: Number(userScore),
+          createdAt: new Date()
+        });
+        statusText.innerText = "Data saved successfully to Firestore!";
+      } catch (error) {
+        console.error("Error saving data: ", error);
+        statusText.innerText = "Error: " + error.message;
+      }
+    });
   </script>
 
 </body>
