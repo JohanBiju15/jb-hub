@@ -1,64 +1,628 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JB Hub</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; }
-    input, button { padding: 8px; margin: 5px 0; display: block; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Cloud Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { margin: 0; overflow-x: hidden; background: #050505; color: white; font-family: sans-serif; min-height: 100vh; }
+        #canvas-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+        .glass { background: rgba(15, 15, 25, 0.82); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        .active-tab { border-bottom: 3px solid #a855f7; color: #a855f7; font-weight: bold; }
+        .hidden { display: none !important; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        ::-webkit-scrollbar-thumb { background: rgba(168, 85, 247, 0.5); border-radius: 3px; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .win-welcome { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    </style>
 </head>
-<body>
+<body class="flex flex-col items-center justify-center p-3 sm:p-6 min-h-screen">
+    <canvas id="canvas-bg"></canvas>
 
-  <h1>JB Hub Database Test</h1>
-  
-  <input type="text" id="username" placeholder="Enter Username">
-  <input type="number" id="score" placeholder="Enter Score">
-  <button id="saveBtn">Save to Database</button>
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-5 z-50 transform -translate-y-24 opacity-0 transition-all duration-300 px-6 py-3 rounded-xl shadow-lg font-medium text-sm flex items-center space-x-2 text-white pointer-events-none">
+        <i id="toast-icon" class="fa"></i>
+        <span id="toast-msg"></span>
+    </div>
 
-  <p id="status"></p>
+    <!-- Windows 11 Style Welcome Overlay -->
+    <div id="win-welcome-screen" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl hidden flex flex-col items-center justify-center p-4 win-welcome">
+        <div class="w-24 h-24 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center text-3xl font-bold shadow-2xl mb-6 shadow-purple-500/50">
+            <i class="fa fa-user text-white"></i>
+        </div>
+        <h1 id="win-welcome-name" class="text-3xl sm:text-4xl font-light tracking-wide text-white mb-2 text-center">Welcome</h1>
+        <p id="win-welcome-classification" class="text-sm text-purple-300 tracking-wider font-medium mb-4 text-center"></p>
+        <p class="text-xs text-gray-400 tracking-widest uppercase font-semibold">Preparing your workspace...</p>
+        <div class="mt-6 flex space-x-1.5">
+            <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+            <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+            <div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+        </div>
+    </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    <!-- Custom Modal Container -->
+    <div id="custom-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="glass p-6 w-full max-w-sm space-y-4 border border-purple-500/30">
+            <h3 id="modal-title" class="text-lg font-bold text-purple-300">Action Required</h3>
+            <p id="modal-desc" class="text-xs text-gray-300"></p>
+            <div id="modal-inputs" class="space-y-3"></div>
+            <div class="flex space-x-2 pt-2">
+                <button id="modal-btn-cancel" onclick="closeModal()" class="flex-1 p-3 bg-white/10 hover:bg-white/20 rounded-xl font-medium text-sm transition">Cancel</button>
+                <button id="modal-btn-confirm" class="flex-1 p-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-bold text-sm transition">Confirm</button>
+            </div>
+        </div>
+    </div>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDz9tvaSzzsp0mMUY0-oIaBR0hSPObPDdQ",
-      authDomain: "jb-hub-93d7a.firebaseapp.com",
-      projectId: "jb-hub-93d7a",
-      storageBucket: "jb-hub-93d7a.firebasestorage.app",
-      messagingSenderId: "110994910947",
-      appId: "1:110994910947:web:264def00932f82407b9fd6",
-      measurementId: "G-7WHNLQ2P9Q"
-    };
+    <div id="app" class="w-full max-w-4xl z-10 flex flex-col items-center">
+        <!-- Auth View -->
+        <div id="auth-view" class="glass p-6 sm:p-8 w-full max-w-md my-auto">
+            <div class="text-center mb-6">
+                <h1 id="auth-title" class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">Welcome Back</h1>
+                <p id="auth-subtitle" class="text-xs text-gray-400 mt-1">Sign in to your secure server account</p>
+            </div>
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+            <div id="auth-form" class="space-y-4">
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Username</label>
+                    <input type="text" id="username" placeholder="Enter username" class="w-full p-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-purple-500 transition text-sm">
+                </div>
+                
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Password</label>
+                    <div class="relative">
+                        <input type="password" id="password" placeholder="Enter password" oninput="checkPasswordStrength()" class="w-full p-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-purple-500 transition pr-10 text-sm">
+                        <button type="button" onclick="togglePass('password')" class="absolute right-3 top-3 text-gray-400 hover:text-white p-1"><i class="fa fa-eye" id="eye-password"></i></button>
+                    </div>
+                </div>
 
-    document.getElementById("saveBtn").addEventListener("click", async () => {
-      const name = document.getElementById("username").value;
-      const userScore = document.getElementById("score").value;
-      const statusText = document.getElementById("status");
+                <div id="signup-fields" class="hidden space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-400 mb-1">
+                            <span>Password Strength</span>
+                            <span id="strength-text">Too Weak</span>
+                        </div>
+                        <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div id="strength-bar" class="h-full w-0 bg-red-500 transition-all duration-300"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 mb-1 block">Date of Birth</label>
+                        <input type="date" id="dob" class="w-full p-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-purple-500 transition text-sm text-gray-200">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 mb-1 block">Confirm Password</label>
+                        <div class="relative">
+                            <input type="password" id="conf-password" placeholder="Confirm password" class="w-full p-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-purple-500 transition pr-10 text-sm">
+                            <button type="button" onclick="togglePass('conf-password')" class="absolute right-3 top-3 text-gray-400 hover:text-white p-1"><i class="fa fa-eye" id="eye-conf-password"></i></button>
+                        </div>
+                    </div>
+                </div>
 
-      if(!name || !userScore) {
-        statusText.innerText = "Please fill in both fields!";
-        return;
-      }
+                <button onclick="handleAuth()" id="auth-btn" class="w-full p-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 rounded-xl font-bold shadow-lg shadow-purple-500/30 transition text-sm">Login</button>
+                
+                <div class="flex justify-between items-center text-xs sm:text-sm pt-2">
+                    <p class="text-gray-400 cursor-pointer hover:text-purple-400 transition" onclick="toggleMode()"><span id="toggle-text">Create Account</span></p>
+                    <p class="text-gray-400 cursor-pointer hover:text-purple-400 transition" onclick="showAbout()">About Us</p>
+                </div>
+            </div>
+        </div>
 
-      try {
-        await setDoc(doc(db, "scores", name), {
-          username: name,
-          score: Number(userScore),
-          createdAt: new Date()
+        <!-- About View (Pre-login) -->
+        <div id="about-view" class="glass p-6 sm:p-8 w-full max-w-md hidden my-auto">
+            <h1 class="text-xl sm:text-2xl font-bold mb-4 text-purple-400">About Platform</h1>
+            <div id="about-content" class="text-xs sm:text-sm text-gray-300 space-y-3 mb-6">
+                <p>Welcome to our high-security professional cloud platform. All user data, notes, and leaderboards are securely synced via backend cloud architecture.</p>
+                <div class="p-4 bg-purple-900/20 border border-purple-500/30 rounded-xl">
+                    <p class="font-bold text-purple-300">Special Thanks</p>
+                    <p id="about-special-thanks" class="text-xs sm:text-sm text-purple-200 mt-1">JB YT GAMER</p>
+                </div>
+            </div>
+            <button onclick="showLogin()" class="w-full p-3 bg-white/10 hover:bg-white/20 rounded-xl font-medium transition text-sm">Back to Login</button>
+        </div>
+
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="glass p-4 sm:p-6 w-full hidden flex flex-col">
+            <div class="flex flex-col sm:flex-row justify-between items-center border-b border-white/10 pb-4 mb-6 gap-3">
+                <div class="flex space-x-2 sm:space-x-4 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
+                    <button onclick="switchTab('notes')" class="tab-btn active-tab pb-2 px-2 text-xs sm:text-sm whitespace-nowrap transition">Notes</button>
+                    <button onclick="switchTab('arcade')" class="tab-btn pb-2 px-2 text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap transition">Cyber Arcade</button>
+                    <button onclick="switchTab('leaderboard')" class="tab-btn pb-2 px-2 text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap transition">Leaderboard</button>
+                    <button onclick="switchTab('rules')" class="tab-btn pb-2 px-2 text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap transition">Admin Message</button>
+                    <button onclick="switchTab('account')" class="tab-btn pb-2 px-2 text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap transition">Account</button>
+                    <button onclick="switchTab('about')" class="tab-btn pb-2 px-2 text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap transition">About Us</button>
+                    <button id="admin-nav-btn" onclick="switchTab('admin')" class="tab-btn pb-2 px-2 text-xs sm:text-sm text-purple-400 hover:text-purple-300 whitespace-nowrap transition hidden">Admin Panel</button>
+                </div>
+                <button onclick="logout()" class="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl text-xs sm:text-sm font-medium transition flex items-center space-x-2 w-full sm:w-auto justify-center">
+                    <i class="fa fa-sign-out-alt"></i><span>Logout</span>
+                </button>
+            </div>
+
+            <div id="tab-content" class="min-h-[400px]"></div>
+        </div>
+    </div>
+
+    <!-- Application Script with Cloudflare Workers Integration -->
+    <script>
+        // REPLACE THIS URL WITH YOUR DEPLOYED CLOUDFLARE WORKER URL
+        const WORKER_URL = "https://your-worker-name.your-subdomain.workers.dev";
+
+        let currentUser = null;
+        let notesData = [];
+        let leaderboardData = [];
+        let globalSettings = { 
+            aboutText: "Welcome to our cloud-powered secure platform.", 
+            rulesText: "Welcome! Please follow the platform guidelines and keep your account secure.",
+            specialThanks: "JB YT GAMER"
+        };
+        let isSignupMode = false;
+        let currentTab = 'notes';
+        let toastTimeout = null;
+
+        async function apiRequest(action, payload = {}) {
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, ...payload })
+                });
+                return await response.json();
+            } catch (err) {
+                console.error("API Request Failed:", err);
+                return { success: false, message: "Network/Server Connection Error" };
+            }
+        }
+
+        window.openModal = function(title, desc, inputsHtml, onConfirm) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-desc').innerText = desc;
+            document.getElementById('modal-inputs').innerHTML = inputsHtml;
+            document.getElementById('custom-modal').classList.remove('hidden');
+            
+            const confirmBtn = document.getElementById('modal-btn-confirm');
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            
+            newConfirmBtn.onclick = () => {
+                onConfirm();
+                closeModal();
+            };
+        }
+
+        window.closeModal = function() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        // Background Animation
+        const canvas = document.getElementById('canvas-bg');
+        const ctx = canvas.getContext('2d');
+        let particles = [], step = 0;
+
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.onresize = resizeCanvas;
+        resizeCanvas();
+
+        for (let i = 0; i < 70; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                length: Math.random() * 20 + 10,
+                speed: Math.random() * 1.5 + 0.5,
+                opacity: Math.random(),
+                fadeSpeed: Math.random() * 0.015 + 0.003
+            });
+        }
+
+        function animateBackground() {
+            step += 0.002;
+            const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            const h1 = (Math.sin(step) * 120) + 120;
+            const h2 = (Math.cos(step * 0.7) * 120) + 240;
+
+            grad.addColorStop(0, `hsl(${h1 % 360}, 70%, 12%)`);
+            grad.addColorStop(0.5, `hsl(${(h1 + 60) % 360}, 75%, 10%)`);
+            grad.addColorStop(1, `hsl(${h2 % 360}, 80%, 14%)`);
+
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.lineWidth = 1.5;
+            particles.forEach(p => {
+                p.y += p.speed;
+                p.opacity += p.fadeSpeed;
+                if (p.opacity > 1 || p.opacity < 0.2) p.fadeSpeed *= -1;
+                if (p.y > canvas.height) { p.y = -20; p.x = Math.random() * canvas.width; }
+
+                ctx.strokeStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x, p.y + p.length);
+                ctx.stroke();
+            });
+
+            requestAnimationFrame(animateBackground);
+        }
+        animateBackground();
+
+        window.showToast = function(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            document.getElementById('toast-msg').innerText = msg;
+            
+            toast.className = `fixed top-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 px-6 py-3 rounded-xl shadow-lg font-medium text-sm flex items-center space-x-2 text-white pointer-events-auto ${type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`;
+            icon.className = `fa ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}`;
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('-translate-y-24', 'opacity-0');
+            }, 3000);
+        }
+
+        window.togglePass = function(id) {
+            const input = document.getElementById(id);
+            const icon = document.getElementById(`eye-${id}`);
+            input.type = input.type === 'password' ? 'text' : 'password';
+            icon.className = input.type === 'password' ? 'fa fa-eye' : 'fa fa-eye-slash';
+        }
+
+        window.toggleMode = function() {
+            isSignupMode = !isSignupMode;
+            document.getElementById('signup-fields').classList.toggle('hidden', !isSignupMode);
+            document.getElementById('auth-title').innerText = isSignupMode ? 'Create Account' : 'Welcome Back';
+            document.getElementById('auth-subtitle').innerText = isSignupMode ? 'Register a secure cloud profile' : 'Sign in to your secure server account';
+            document.getElementById('auth-btn').innerText = isSignupMode ? 'Sign Up' : 'Login';
+            document.getElementById('toggle-text').innerText = isSignupMode ? 'Already have an account? Login' : 'Create Account';
+            checkPasswordStrength();
+        }
+
+        window.showAbout = function() {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('about-view').classList.remove('hidden');
+        }
+
+        window.showLogin = function() {
+            document.getElementById('about-view').classList.add('hidden');
+            document.getElementById('auth-view').classList.remove('hidden');
+        }
+
+        window.checkPasswordStrength = function() {
+            const pass = document.getElementById('password').value;
+            const bar = document.getElementById('strength-bar');
+            const text = document.getElementById('strength-text');
+            if (!bar || !text) return;
+            
+            let score = 0;
+            if (pass.length > 5) score++;
+            if (pass.length > 8) score++;
+            if (/[A-Z]/.test(pass)) score++;
+            if (/[0-9!@#$%^&*]/.test(pass)) score++;
+
+            if (pass.length === 0) { bar.style.width = '0%'; bar.className = 'h-full bg-red-500 transition-all duration-300'; text.innerText = 'Too Weak'; }
+            else if (score <= 1) { bar.style.width = '25%'; bar.className = 'h-full bg-red-500 transition-all duration-300'; text.innerText = 'Too Weak'; }
+            else if (score === 2) { bar.style.width = '50%'; bar.className = 'h-full bg-yellow-500 transition-all duration-300'; text.innerText = 'Fair'; }
+            else if (score === 3) { bar.style.width = '75%'; bar.className = 'h-full bg-blue-500 transition-all duration-300'; text.innerText = 'Strong'; }
+            else { bar.style.width = '100%'; bar.className = 'h-full bg-emerald-500 transition-all duration-300'; text.innerText = 'Very Strong'; }
+        }
+
+        window.handleAuth = async function() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) { showToast("Please fill in all fields", "error"); return; }
+
+            if (isSignupMode) {
+                const dob = document.getElementById('dob').value;
+                const confPass = document.getElementById('conf-password').value;
+                if (!dob) { showToast("Please enter your Date of Birth", "error"); return; }
+                if (password !== confPass) { showToast("Passwords do not match.", "error"); return; }
+
+                const res = await apiRequest('signup', { username, password, dob });
+                if (res.success) {
+                    showToast("Account created successfully!");
+                    currentUser = res.user;
+                    triggerWinWelcome(currentUser.username, currentUser.dob);
+                } else {
+                    showToast(res.message || "Signup failed", "error");
+                }
+            } else {
+                const res = await apiRequest('login', { username, password });
+                if (res.success) {
+                    currentUser = res.user;
+                    showToast("Logged in successfully!");
+                    triggerWinWelcome(currentUser.username, currentUser.dob);
+                } else {
+                    showToast(res.message || "Invalid credentials", "error");
+                }
+            }
+        }
+
+        function getAgeCategory(dobStr) {
+            if (!dobStr) return "adulthood (20–64 years)";
+            const dob = new Date(dobStr);
+            const diff = Date.now() - dob.getTime();
+            const age = new Date(diff).getUTCFullYear() - 1970;
+            if (age <= 1) return "infancy (0–1 year)";
+            if (age <= 12) return "childhood (1–12 years)";
+            if (age <= 19) return "adolescence (13–19 years)";
+            if (age <= 64) return "adulthood (20–64 years)";
+            return "seniors (65+ years)";
+        }
+
+        function triggerWinWelcome(username, dob) {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('about-view').classList.add('hidden');
+            
+            const welcomeScreen = document.getElementById('win-welcome-screen');
+            document.getElementById('win-welcome-name').innerText = `Welcome, ${username}`;
+            document.getElementById('win-welcome-classification').innerText = `You are in ${getAgeCategory(dob)}`;
+            welcomeScreen.classList.remove('hidden');
+
+            setTimeout(() => {
+                welcomeScreen.classList.add('hidden');
+                enterDashboard();
+            }, 2500);
+        }
+
+        async function enterDashboard() {
+            document.getElementById('dashboard-view').classList.remove('hidden');
+            document.getElementById('admin-nav-btn').classList.toggle('hidden', !currentUser.isAdmin);
+            await loadInitialData();
+            switchTab('notes');
+        }
+
+        async function loadInitialData() {
+            const settingsRes = await apiRequest('get_settings');
+            if (settingsRes.success) globalSettings = settingsRes.settings;
+
+            const notesRes = await apiRequest('get_notes', { userId: currentUser.id, isAdmin: currentUser.isAdmin });
+            if (notesRes.success) notesData = notesRes.notes;
+
+            const lbRes = await apiRequest('get_leaderboard');
+            if (lbRes.success) leaderboardData = lbRes.leaderboard;
+        }
+
+        window.logout = function() {
+            currentUser = null;
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('auth-view').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            showToast("Logged out successfully");
+        }
+
+        window.switchTab = function(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active-tab');
+                b.classList.add('text-gray-400');
+            });
+            event.target.classList.add('active-tab');
+            event.target.classList.remove('text-gray-400');
+
+            const container = document.getElementById('tab-content');
+            container.innerHTML = '';
+
+            if (tab === 'notes') renderNotesTab(container);
+            else if (tab === 'arcade') renderArcadeTab(container);
+            else if (tab === 'leaderboard') renderLeaderboardTab(container);
+            else if (tab === 'rules') renderRulesTab(container);
+            else if (tab === 'account') renderAccountTab(container);
+            else if (tab === 'about') renderAboutTab(container);
+            else if (tab === 'admin') renderAdminTab(container);
+        }
+
+        function renderNotesTab(container) {
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div class="glass p-4 rounded-xl space-y-3">
+                        <h2 class="font-bold text-lg text-purple-300">Add New Note</h2>
+                        <input type="text" id="note-title-input" placeholder="Note Title..." class="w-full p-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-purple-500 text-sm">
+                        <textarea id="note-input" placeholder="Type your private note..." class="w-full p-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-purple-500 h-24 resize-none text-sm"></textarea>
+                        <button onclick="saveNote()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-xl text-sm font-bold transition">Save Note</button>
+                    </div>
+                    <div id="notes-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+            `;
+            renderNotesList();
+        }
+
+        function renderNotesList() {
+            const listContainer = document.getElementById('notes-list');
+            if (!listContainer) return;
+
+            if (notesData.length === 0) {
+                listContainer.innerHTML = `<p class="text-gray-400 text-sm italic col-span-2">No notes added yet.</p>`;
+                return;
+            }
+
+            listContainer.innerHTML = notesData.map(n => `
+                <div class="glass p-4 rounded-xl flex flex-col justify-between space-y-2 border border-white/10 relative">
+                    <div>
+                        <div class="flex justify-between items-start mb-1">
+                            <h3 class="font-bold text-purple-300 text-base">${escapeHtml(n.title || 'Untitled Note')}</h3>
+                        </div>
+                        <p class="text-sm text-gray-200 whitespace-pre-wrap">${escapeHtml(n.text)}</p>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-gray-400 pt-2 border-t border-white/5">
+                        <span>Created: ${new Date(n.createdAt).toLocaleDateString()}</span>
+                        <button onclick="deleteNotePrompt('${n.id}')" class="text-red-400 hover:underline">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.saveNote = async function() {
+            const title = document.getElementById('note-title-input').value.trim();
+            const text = document.getElementById('note-input').value.trim();
+            if (!title || !text) { showToast("Title and text cannot be empty", "error"); return; }
+
+            const res = await apiRequest('save_note', { userId: currentUser.id, title, text });
+            if (res.success) {
+                notesData.unshift(res.note);
+                renderNotesList();
+                document.getElementById('note-title-input').value = '';
+                document.getElementById('note-input').value = '';
+                showToast("Note saved!");
+            }
+        }
+
+        window.deleteNotePrompt = function(id) {
+            openModal("Delete Note", "Are you sure you want to delete this note?", "", async () => {
+                const res = await apiRequest('delete_note', { id });
+                if (res.success) {
+                    notesData = notesData.filter(n => n.id !== id);
+                    renderNotesList();
+                    showToast("Note deleted");
+                }
+            });
+        }
+
+        // Cyber Arcade Logic
+        let snakeInterval = null;
+        let cyberSnake = { snake: [], food: { x: 0, y: 0 }, dir: 'RIGHT', nextDir: 'RIGHT', score: 0, running: false };
+
+        function renderArcadeTab(container) {
+            container.innerHTML = `
+                <div class="flex flex-col items-center space-y-3">
+                    <div class="flex justify-between w-full max-w-sm px-2 text-xs sm:text-sm font-bold text-purple-300">
+                        <span>Score: <span id="game-score" class="text-pink-400">0</span></span>
+                    </div>
+                    <div class="relative bg-black/60 border border-purple-500/40 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
+                        <canvas id="snake-canvas" width="320" height="320" class="block"></canvas>
+                        <div id="game-overlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center space-y-3 p-4 text-center">
+                            <h3 id="overlay-title" class="text-2xl font-black bg-gradient-to-r from-pink-500 to-purple-400 bg-clip-text text-transparent">CYBER SNAKE</h3>
+                            <button id="overlay-btn" onclick="startCyberGame()" class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 rounded-xl text-sm font-bold shadow-lg shadow-purple-500/40 transition">Start Game</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            initCyberCanvas();
+        }
+
+        let snakeCanvas, sCtx;
+        function initCyberCanvas() {
+            snakeCanvas = document.getElementById('snake-canvas');
+            if (!snakeCanvas) return;
+            sCtx = snakeCanvas.getContext('2d');
+            sCtx.fillStyle = '#07070f';
+            sCtx.fillRect(0, 0, 320, 320);
+        }
+
+        window.startCyberGame = function() {
+            document.getElementById('game-overlay').classList.add('hidden');
+            cyberSnake.snake = [{ x: 160, y: 160 }, { x: 150, y: 160 }, { x: 140, y: 160 }];
+            cyberSnake.dir = 'RIGHT'; cyberSnake.nextDir = 'RIGHT'; cyberSnake.score = 0; cyberSnake.running = true;
+            spawnCyberFood();
+            if (snakeInterval) clearInterval(snakeInterval);
+            snakeInterval = setInterval(updateCyberLoop, 100);
+        }
+
+        function spawnCyberFood() {
+            cyberSnake.food = { x: Math.floor(Math.random() * 32) * 10, y: Math.floor(Math.random() * 32) * 10 };
+        }
+
+        window.addEventListener('keydown', e => {
+            if (!cyberSnake.running) return;
+            if (['ArrowUp', 'KeyW'].includes(e.code) && cyberSnake.dir !== 'DOWN') cyberSnake.nextDir = 'UP';
+            if (['ArrowDown', 'KeyS'].includes(e.code) && cyberSnake.dir !== 'UP') cyberSnake.nextDir = 'DOWN';
+            if (['ArrowLeft', 'KeyA'].includes(e.code) && cyberSnake.dir !== 'RIGHT') cyberSnake.nextDir = 'LEFT';
+            if (['ArrowRight', 'KeyD'].includes(e.code) && cyberSnake.dir !== 'LEFT') cyberSnake.nextDir = 'RIGHT';
         });
-        statusText.innerText = "Data saved successfully to Firestore!";
-      } catch (error) {
-        console.error("Error saving data: ", error);
-        statusText.innerText = "Error: " + error.message;
-      }
-    });
-  </script>
 
+        function updateCyberLoop() {
+            cyberSnake.dir = cyberSnake.nextDir;
+            let head = { ...cyberSnake.snake[0] };
+            if (cyberSnake.dir === 'UP') head.y -= 10;
+            if (cyberSnake.dir === 'DOWN') head.y += 10;
+            if (cyberSnake.dir === 'LEFT') head.x -= 10;
+            if (cyberSnake.dir === 'RIGHT') head.x += 10;
+
+            if (head.x < 0 || head.x >= 320 || head.y < 0 || head.y >= 320 || cyberSnake.snake.some(p => p.x === head.x && p.y === head.y)) {
+                endCyberGame();
+                return;
+            }
+
+            if (head.x === cyberSnake.food.x && head.y === cyberSnake.food.y) {
+                cyberSnake.score += 10;
+                document.getElementById('game-score').innerText = cyberSnake.score;
+                spawnCyberFood();
+            } else {
+                cyberSnake.snake.pop();
+            }
+
+            cyberSnake.snake.unshift(head);
+            sCtx.fillStyle = '#07070f'; sCtx.fillRect(0, 0, 320, 320);
+            sCtx.fillStyle = '#ec4899'; sCtx.fillRect(cyberSnake.food.x, cyberSnake.food.y, 10, 10);
+            sCtx.fillStyle = '#a855f7'; cyberSnake.snake.forEach(p => sCtx.fillRect(p.x, p.y, 9, 9));
+        }
+
+        async function endCyberGame() {
+            cyberSnake.running = false;
+            clearInterval(snakeInterval);
+            if (cyberSnake.score > 0) {
+                await apiRequest('save_score', { username: currentUser.username, score: cyberSnake.score });
+            }
+            document.getElementById('overlay-title').innerText = "GAME OVER";
+            document.getElementById('overlay-btn').innerText = "Restart Game";
+            document.getElementById('game-overlay').classList.remove('hidden');
+        }
+
+        function renderLeaderboardTab(container) {
+            container.innerHTML = `
+                <div class="space-y-4 max-w-md mx-auto">
+                    <h2 class="text-lg font-bold text-purple-300 text-center">Arcade Leaderboard</h2>
+                    <div id="leaderboard-list" class="space-y-2"></div>
+                </div>
+            `;
+            renderLeaderboard();
+        }
+
+        function renderLeaderboard() {
+            const list = document.getElementById('leaderboard-list');
+            if (!list) return;
+            const sorted = [...leaderboardData].sort((a, b) => b.score - a.score).slice(0, 10);
+            list.innerHTML = sorted.map((item, idx) => `
+                <div class="glass p-3 rounded-xl flex justify-between items-center text-sm border border-white/10">
+                    <span class="font-bold text-purple-400">#${idx + 1} ${escapeHtml(item.username)}</span>
+                    <span class="font-extrabold text-pink-400">${item.score} pts</span>
+                </div>
+            `).join('');
+        }
+
+        function renderRulesTab(container) {
+            container.innerHTML = `<div class="glass p-6 rounded-xl max-w-md mx-auto text-sm text-gray-300 whitespace-pre-wrap">${globalSettings.rulesText}</div>`;
+        }
+
+        function renderAccountTab(container) {
+            container.innerHTML = `
+                <div class="glass p-6 rounded-xl max-w-md mx-auto space-y-4">
+                    <h2 class="text-lg font-bold text-purple-300">Account Profile</h2>
+                    <p class="text-sm">Username: ${escapeHtml(currentUser.username)}</p>
+                    <p class="text-sm">DOB: ${currentUser.dob}</p>
+                </div>
+            `;
+        }
+
+        function renderAboutTab(container) {
+            container.innerHTML = `
+                <div class="glass p-6 rounded-xl max-w-md mx-auto text-center space-y-4">
+                    <h2 class="text-xl font-bold text-purple-400">About Platform</h2>
+                    <p class="text-sm text-gray-300">${globalSettings.aboutText}</p>
+                    <div class="p-4 bg-purple-900/20 rounded-xl"><p class="font-bold text-purple-300">${globalSettings.specialThanks}</p></div>
+                </div>
+            `;
+        }
+
+        function renderAdminTab(container) {
+            container.innerHTML = `<div class="glass p-6 rounded-xl max-w-xl mx-auto"><h2 class="text-lg font-bold text-purple-400">Admin Panel</h2></div>`;
+        }
+
+        function escapeHtml(str) {
+            return str ? str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : '';
+        }
+    </script>
 </body>
 </html>
